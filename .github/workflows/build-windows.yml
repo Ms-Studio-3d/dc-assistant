@@ -10,18 +10,6 @@ permissions:
   contents: read
 
 jobs:
-  build:name: Build Windows EXE
-
-on:
-  workflow_dispatch:
-  push:
-    branches: [main, master]
-  pull_request:
-
-permissions:
-  contents: read
-
-jobs:
   build:
     runs-on: windows-latest
     steps:
@@ -34,60 +22,16 @@ jobs:
         run: python -m pip install -r requirements-build.txt
       - name: Test and build
         shell: pwsh
-        run: ./build-windows.ps1
+        run: ./build-installer.ps1
       - name: Upload Windows application
         uses: actions/upload-artifact@v4
         with:
           name: DC-Assistant-Windows
           path: dist/DC-Assistant/**
           if-no-files-found: error
-
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
-        with:
-          python-version: '3.12'
-          cache: pip
-      - name: Install dependencies
-        run: python -m pip install -r requirements-build.txt
-      - name: Test and build
-        shell: pwsh
-        run: ./build-windows.ps1
-      - name: Upload Windows application
+      - name: Upload Windows installer
         uses: actions/upload-artifact@v4
         with:
-          name: DC-Assistant-Windowsname: Build Windows EXE
-
-on:
-  workflow_dispatch:
-  push:
-    branches: [main, master]
-  pull_request:
-
-permissions:
-  contents: read
-
-jobs:
-  build:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
-        with:
-          python-version: '3.12'
-          cache: pip
-      - name: Install dependencies
-        run: python -m pip install -r requirements-build.txt
-      - name: Test and build
-        shell: pwsh
-        run: ./build-windows.ps1
-      - name: Upload Windows application
-        uses: actions/upload-artifact@v4
-        with:
-          name: DC-Assistant-Windows
-          path: dist/DC-Assistant/**
-          if-no-files-found: error
-
-          path: dist/DC-Assistant/**
+          name: DC-Assistant-Setup
+          path: dist/DC-Assistant-Setup-*.exe
           if-no-files-found: error
