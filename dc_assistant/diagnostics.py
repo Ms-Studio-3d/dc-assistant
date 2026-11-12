@@ -51,12 +51,24 @@ def self_test(report_path, data_dir, inputs_path=None):
         from .reports import write_xlsx
         from .pdf_checks import read_pdf_isolated
         from .dialogs import RegisterDialog
+        from .branding import configure_process, apply_brand
+        from .theme import apply_theme
+        from .data_safety import (
+            InstanceLock,
+            backup_database,
+            inspect_backup,
+            restore_database,
+        )
 
         data_dir = Path(data_dir)
         data_dir.mkdir(parents=True, exist_ok=True)
+        configure_process()
         root = tk.Tk()
         root.withdraw()
         try:
+            apply_theme(root)
+            apply_brand(root)
+            assert root.brand_logo.width() == 410
             root.update_idletasks()
             broken = data_dir / "broken.xlsx"
             broken.write_bytes(b"not a workbook")
@@ -71,16 +83,41 @@ def self_test(report_path, data_dir, inputs_path=None):
             assert root.grab_current() is None
         finally:
             root.destroy()
-        checks.extend(["tkinter", "corrupt workbook leaves no modal window"])
+        checks.extend(
+            [
+                "tkinter",
+                "approved DC identity assets",
+                "corrupt workbook leaves no modal window",
+            ]
+        )
 
         store = Store(data_dir / "self-test.sqlite3")
         try:
             project = store.save_project("Self test", "000075", {})
             assert store.get_project(project)["code"] == "000075"
             assert store.db.execute("PRAGMA user_version").fetchone()[0] == 1
+            backup = backup_database(store, data_dir / "backup-check.sqlite3")
+            expected_projects = len(store.projects())
+            store.save_project("Temporary extra project", "TEMP", {})
+            safety = restore_database(store, backup)
+            assert len(store.projects()) == expected_projects
+            assert inspect_backup(safety)["projects"] == expected_projects + 1
         finally:
             store.close()
         checks.extend(["sqlite schema version", "project persistence"])
+        checks.append("database backup and restore with safety copy")
+        lock = InstanceLock(data_dir)
+        try:
+            try:
+                second = InstanceLock(data_dir)
+            except RuntimeError:
+                pass
+            else:
+                second.close()
+                raise AssertionError("Duplicate instance lock was accepted")
+        finally:
+            lock.close()
+        checks.append("single-instance database lock")
 
         workbook_path = data_dir / "self-test.xlsx"
         write_xlsx(

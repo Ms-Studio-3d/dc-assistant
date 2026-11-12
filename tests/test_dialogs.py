@@ -15,7 +15,7 @@ class DialogTests(unittest.TestCase):
         self.scratch.mkdir(exist_ok=True)
         self.root = self.scratch / uuid.uuid4().hex
         self.root.mkdir()
-        self.app = App(self.root)
+        self.app = App(self.root, show=False)
         self.app.withdraw()
 
     def tearDown(self):

@@ -3,7 +3,7 @@ $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Push-Location -LiteralPath $projectRoot
 try {
-    & $Python -m black --check --workers 1 dc_assistant tests launcher.py
+    & $Python -m black --check --workers 1 dc_assistant tests tools launcher.py
     if ($LASTEXITCODE -ne 0) { throw "Code formatting check failed" }
     & $Python -m unittest discover -s tests -v
     if ($LASTEXITCODE -ne 0) { throw "Tests failed" }
@@ -12,6 +12,9 @@ try {
         '--noconfirm', '--onedir', '--windowed', '--noupx',
         '--collect-data', 'pdfminer',
         '--collect-binaries', 'pypdfium2_raw',
+        '--add-data', 'dc_assistant/assets;dc_assistant/assets',
+        '--icon', 'dc_assistant/assets/dc-assistant.ico',
+        '--manifest', 'app.manifest',
         '--exclude-module', 'numpy',
         '--exclude-module', 'pandas',
         '--exclude-module', 'scipy',

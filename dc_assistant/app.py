@@ -7,7 +7,14 @@ import queue
 import threading
 import tkinter as tk
 from pathlib import Path
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, ttk
+
+from . import __version__, ui_messages as messagebox
+from .branding import configure_process, apply_brand
+from .data_safety import InstanceLock, daily_backup, restore_database
+from .data_dialog import DataDialog
+from .theme import BG, apply_theme, apply_window_theme
+from .windows import place_window
 
 from .core import NamingRule, Store, export_results, read_register, scan_batch
 from .dialogs import ProjectDialog, RegisterDialog
@@ -15,17 +22,37 @@ from .issues import format_status, pdf_check_label
 from .scanning import ScanCancelled
 
 
+class StartupError(RuntimeError):
+    pass
+
+
 class App(tk.Tk):
-    def __init__(self, data_dir):
+    def __init__(self, data_dir, *, show=True):
+        configure_process()
         super().__init__()
-        self.title("DC Assistant - مساعد ضبط المستندات")
-        self.geometry("1260x780")
+        self.withdraw()
+        self.store = None
+        self.instance = None
+        self.poll_id = None
+        self._closed = False
+        try:
+            self._initialize(data_dir, show)
+        except Exception as exc:
+            if self.store is not None:
+                self.store.close()
+            if self.instance is not None:
+                self.instance.close()
+            if show:
+                messagebox.showerror("تعذر فتح البرنامج", str(exc), parent=self)
+            self.destroy()
+            raise StartupError(str(exc)) from exc
+
+    def _initialize(self, data_dir, show):
+        self.title(f"DC Assistant {__version__} — مساعد ضبط المستندات")
         self.minsize(1000, 650)
-        style = ttk.Style(self)
-        style.theme_use("clam")
-        style.configure(".", font=("Segoe UI", 10))
-        style.configure("TButton", padding=(12, 8))
-        style.configure("Treeview", rowheight=29)
+        apply_theme(self)
+        apply_brand(self)
+        self.instance = InstanceLock(data_dir)
         self.store = Store(Path(data_dir) / "dc-assistant.sqlite3")
         self.project = None
         self.results = None
@@ -34,10 +61,21 @@ class App(tk.Tk):
         self.events = queue.Queue()
         self.cancel_event = threading.Event()
         self.protocol("WM_DELETE_WINDOW", self.close)
-        self.container = ttk.Frame(self, padding=18)
+        self.container = ttk.Frame(self, padding=24)
         self.container.pack(fill="both", expand=True)
         self.show_home()
-        self.after(100, self.poll)
+        place_window(self, (1260, 780), show=show)
+        apply_window_theme(self)
+        self.poll_id = self.after(100, self.poll)
+        try:
+            daily_backup(self.store)
+        except Exception as exc:
+            if show:
+                messagebox.showerror(
+                    "تعذرت النسخة التلقائية",
+                    f"قاعدة البيانات متاحة، لكن لم تحفظ النسخة الاحتياطية:\n{exc}",
+                    parent=self,
+                )
 
     def clear(self):
         for child in self.container.winfo_children():
@@ -47,25 +85,58 @@ class App(tk.Tk):
         if self.busy:
             return
         self.clear()
+        header = ttk.Frame(self.container)
+        header.pack(fill="x", pady=(4, 32))
+        tk.Label(header, image=self.brand_logo, background=BG).pack(side="left")
+        ttk.Button(
+            header, text="البيانات والنسخ الاحتياطي", command=self.manage_data
+        ).pack(side="right")
         ttk.Label(
             self.container,
             text="هتشتغل على أنهي مشروع؟",
-            font=("Segoe UI", 24),
+            font=("Segoe UI", 23),
             anchor="e",
-        ).pack(fill="x", pady=(35, 35))
+        ).pack(fill="x", pady=(20, 12))
+        ttk.Label(
+            self.container,
+            text="اختر مشروعًا محفوظًا أو سجّل مشروعًا جديدًا بقواعده الخاصة.",
+            style="Muted.TLabel",
+            anchor="e",
+        ).pack(fill="x")
         choices = ttk.Frame(self.container)
-        choices.pack(pady=20)
+        choices.pack(pady=34)
         ttk.Button(
-            choices, text="مشروع مسجل", width=30, command=self.choose_existing
-        ).grid(row=0, column=1, padx=20, ipady=25)
-        ttk.Button(choices, text="مشروع جديد", width=30, command=self.new_project).grid(
-            row=0, column=0, padx=20, ipady=25
+            choices,
+            text="مشروع مسجل",
+            width=28,
+            command=self.choose_existing,
+            style="Accent.TButton",
+        ).grid(row=0, column=1, padx=10, ipady=18)
+        ttk.Button(choices, text="مشروع جديد", width=28, command=self.new_project).grid(
+            row=0, column=0, padx=10, ipady=18
         )
         ttk.Label(
             self.container,
-            text=f"مكان حفظ بيانات البرنامج: {self.store.path}",
+            text=f"DC Assistant {__version__}  •  بيانات محلية محفوظة",
+            style="Muted.TLabel",
             anchor="e",
-        ).pack(side="bottom", fill="x")
+        ).pack(side="bottom", fill="x", pady=6)
+
+    def manage_data(self):
+        if self.busy:
+            return
+        dialog = DataDialog(self)
+        self.wait_window(dialog)
+
+    def restore_from_backup(self, path):
+        if self.busy:
+            raise ValueError("أوقف الفحص قبل استرجاع البيانات")
+        safety = restore_database(self.store, path)
+        self.project = None
+        self.results = None
+        self.results_settings = None
+        self.show_home()
+        return safety
 
     def new_project(self):
         dlg = ProjectDialog(self)
@@ -81,10 +152,9 @@ class App(tk.Tk):
             )
             return
         dlg = tk.Toplevel(self)
+        dlg.withdraw()
         dlg.title("المشاريع المسجلة")
-        dlg.geometry("650x210")
         dlg.transient(self)
-        dlg.grab_set()
         labels = [
             p["name"] + (" — " + p["code"] if p["code"] else "") for p in projects
         ]
@@ -100,7 +170,11 @@ class App(tk.Tk):
             dlg.destroy()
             self.open_project(projects[i]["id"])
 
-        ttk.Button(dlg, text="فتح المشروع", command=choose).pack(pady=18)
+        ttk.Button(
+            dlg, text="فتح المشروع", command=choose, style="Accent.TButton"
+        ).pack(pady=18)
+        apply_window_theme(dlg)
+        place_window(dlg, (650, 250), self, modal=True)
 
     def open_project(self, project_id):
         self.project = self.store.get_project(project_id)
@@ -307,7 +381,7 @@ class App(tk.Tk):
                     self.status_var.set("أُلغي الفحص؛ لم تحفظ نتيجة جزئية")
         except queue.Empty:
             pass
-        self.after(100, self.poll)
+        self.poll_id = self.after(100, self.poll)
 
     def set_busy(self, value):
         self.busy = value
@@ -389,10 +463,9 @@ class App(tk.Tk):
             )
             return
         dlg = tk.Toplevel(self)
+        dlg.withdraw()
         dlg.title("دفعات المشروع السابقة")
-        dlg.geometry("950x430")
         dlg.transient(self)
-        dlg.grab_set()
         items = tk.Listbox(dlg, font=("Segoe UI", 11))
         items.pack(fill="both", expand=True, padx=14, pady=14)
         for batch in batches:
@@ -408,6 +481,8 @@ class App(tk.Tk):
                 self.display(batch["results"], batch["settings"])
 
         ttk.Button(dlg, text="عرض النتائج", command=choose).pack(pady=10)
+        apply_window_theme(dlg)
+        place_window(dlg, (950, 430), self, modal=True)
 
     def export(self):
         if not self.results:
@@ -433,13 +508,29 @@ class App(tk.Tk):
             messagebox.showerror("تعذر التصدير", str(exc), parent=self)
 
     def close(self):
+        if self._closed:
+            return
         if self.busy and not messagebox.askyesno(
             "الفحص مستمر", "إغلاق البرنامج وإلغاء حفظ نتيجة الفحص الحالي؟", parent=self
         ):
             return
+        self._closed = True
         self.cancel_event.set()
-        self.store.close()
-        self.destroy()
+        if self.poll_id is not None:
+            self.after_cancel(self.poll_id)
+        try:
+            daily_backup(self.store)
+        except Exception as exc:
+            if self.winfo_viewable():
+                messagebox.showerror(
+                    "تعذرت النسخة التلقائية",
+                    f"البيانات الرئيسية محفوظة؛ تعذر حفظ النسخة الاحتياطية:\n{exc}",
+                    parent=self,
+                )
+        finally:
+            self.store.close()
+            self.instance.close()
+            self.destroy()
 
 
 def main():
@@ -459,7 +550,10 @@ def main():
         raise SystemExit(
             self_test(args.self_test_report, args.data_dir, args.self_test_inputs)
         )
-    App(args.data_dir).mainloop()
+    try:
+        App(args.data_dir).mainloop()
+    except StartupError:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,8 @@
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import ttk
+from . import ui_messages as messagebox
+from .theme import apply_window_theme
+from .windows import place_window
 from .constants import DEFAULT_STATUSES, ROLE_LABELS
 from .naming import NamingRule
 from .registers import excel_columns, excel_sheets
@@ -19,12 +22,11 @@ def field(parent, row, label, value="", width=60):
 class ProjectDialog(tk.Toplevel):
     def __init__(self, app, project=None):
         super().__init__(app)
+        self.withdraw()
         self.app, self.project, self.result = app, project, None
         self.title("إعدادات المشروع" if project else "مشروع جديد")
-        self.geometry("1000x690")
         self.minsize(850, 620)
         self.transient(app)
-        self.grab_set()
         settings = project["settings"] if project else {}
         book = ttk.Notebook(self)
         book.pack(fill="both", expand=True, padx=14, pady=12)
@@ -112,7 +114,7 @@ class ProjectDialog(tk.Toplevel):
         self.fallback_var = tk.BooleanVar(value=settings.get("pdf_fallback", True))
         ttk.Checkbutton(
             naming,
-            text="قراءة موسعة لملفات PDF المعقدة عند فشل القراءة السريعة (أبطأ)",
+            text="استخدام قارئ بديل عند تعذر قراءة الملف (قد يستغرق وقتًا أطول)",
             variable=self.fallback_var,
         ).grid(row=6, column=0, columnspan=2, sticky="e", padx=8)
         if settings.get("parts"):
@@ -142,12 +144,15 @@ class ProjectDialog(tk.Toplevel):
         self.procedure_text.insert("1.0", settings.get("procedure_notes", ""))
         buttons = ttk.Frame(self, padding=12)
         buttons.pack(fill="x")
-        ttk.Button(buttons, text="حفظ المشروع", command=self.save).pack(
-            side="right", padx=6
-        )
+        ttk.Button(
+            buttons, text="حفظ المشروع", command=self.save, style="Accent.TButton"
+        ).pack(side="right", padx=6)
         ttk.Button(buttons, text="إلغاء", command=self.destroy).pack(
             side="right", padx=6
         )
+
+        apply_window_theme(self)
+        place_window(self, (1000, 690), app, show=app.winfo_viewable(), modal=True)
 
     def build_parts(self, existing=None):
         if existing is not None and not isinstance(existing, list):
@@ -246,9 +251,11 @@ class RegisterDialog(tk.Toplevel):
     def __init__(self, app, path):
         sheets = excel_sheets(path)
         super().__init__(app)
+        self.withdraw()
         try:
             self._build(app, path, sheets)
-            self.grab_set()
+            apply_window_theme(self)
+            place_window(self, (900, 650), app, show=app.winfo_viewable(), modal=True)
         except Exception:
             self.destroy()
             raise
@@ -256,7 +263,6 @@ class RegisterDialog(tk.Toplevel):
     def _build(self, app, path, sheets):
         self.path, self.result = path, None
         self.title("تحديد شيت وأعمدة اللوج")
-        self.geometry("850x580")
         self.transient(app)
         frame = ttk.Frame(self, padding=18)
         frame.pack(fill="both", expand=True)
