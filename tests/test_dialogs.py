@@ -87,11 +87,39 @@ class DialogTests(unittest.TestCase):
         project_id = self.app.store.save_project("Saved", "P", {})
         self.app.open_project(project_id)
         self.assertEqual(len(self.app.action_buttons), 6)
+        self.assertEqual(self.app.result_tabs.tab(0, "text"), "حصر اللوحات")
         self.app.set_busy(True)
         self.app.cancel_scan()
         self.assertTrue(self.app.cancel_event.is_set())
         self.app.set_busy(False)
         self.assertIn("disabled", self.app.cancel_button.state())
+
+    def test_drawing_tab_opens_only_its_pdf(self):
+        project_id = self.app.store.save_project("Saved", "P", {})
+        self.app.open_project(project_id)
+        pdf = self.root / "sheet.pdf"
+        pdf.write_bytes(b"PDF")
+        drawing = {
+            "number": "P-001", "revision": "00", "title": "Plan",
+            "discipline": "ARC", "pdf_count": 1, "dwg_count": 1,
+            "file_count": 2, "missing_formats": [], "pdf_paths": [str(pdf)],
+        }
+        self.app.display({
+            "items": [], "drawings": [drawing],
+            "summary": {"files": 2, "pdf": 1, "dwg": 1, "drawings": 1},
+        })
+        self.app.drawing_tree.selection_set("0")
+        with patch("dc_assistant.app.os.startfile") as startfile:
+            self.app.open_selected()
+        startfile.assert_called_once_with(str(pdf))
+        drawing["pdf_paths"] = []
+        with (
+            patch("dc_assistant.app.os.startfile") as startfile,
+            patch("dc_assistant.app.messagebox.showinfo") as showinfo,
+        ):
+            self.app.open_selected()
+        startfile.assert_not_called()
+        showinfo.assert_called_once()
 
 
 if __name__ == "__main__":

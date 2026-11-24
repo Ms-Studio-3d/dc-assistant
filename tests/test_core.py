@@ -1,6 +1,7 @@
 import shutil
 import uuid
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 import openpyxl
@@ -136,15 +137,16 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(result["items"][0]["title"], "")
         self.assertTrue(any("أكثر من سجل" in x for x in result["items"][0]["issues"]))
 
-    def test_same_revision_content_conflict_and_explicit_archive_exclusion(self):
+    def test_native_files_are_counted_without_reading_and_archive_can_be_excluded(self):
         name = "1-00075-QEI-EEL-ARC-SDW-AMN-00001-00.dwg"
         (self.root / name).write_bytes(b"current")
         (self.root / "OLD").mkdir()
         (self.root / "OLD" / name).write_bytes(b"different")
-        result = scan_batch(self.root, settings(), check_pdf=False)
+        with patch("dc_assistant.scanning.digest", side_effect=AssertionError("DWG read")):
+            result = scan_batch(self.root, settings(), check_pdf=False)
         self.assertEqual(result["summary"]["files"], 2)
         self.assertTrue(
-            all(any("ملفات مختلفة" in x for x in r["issues"]) for r in result["items"])
+            all(any("المحتوى لم يُفتح" in x for x in r["issues"]) for r in result["items"])
         )
         conf = settings()
         conf["excluded_folders"] = ["OLD"]
@@ -214,6 +216,44 @@ class CoreTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             export_results(path, {}, results)
         self.assertEqual(path.read_bytes(), b"original")
+
+    def test_delivery_sheet_counts_distinct_drawings_and_reports_missing_formats(self):
+        root_name = "1-00075-QEI-EEL-ARC-SDW-AMN-00001-00"
+        self.pdf(self.root / (root_name + ".pdf"))
+        self.pdf(self.root / (root_name[:-2] + "01.pdf"))
+        (self.root / (root_name + ".dwg")).write_bytes(b"native CAD")
+        other = "1-00075-QEI-EEL-STR-SDW-AMN-00002-00"
+        (self.root / (other + ".dwg")).write_bytes(b"native CAD")
+        (self.root / "model.rvt").write_bytes(b"native Revit")
+        config = settings()
+        config["required_drawing_formats"] = ["PDF", "DWG"]
+        records = [
+            {"number": root_name[:-3], "revision": "00", "title": "Plan", "row": 2, "source": "log.xlsx"},
+            {"number": other[:-3], "revision": "00", "title": "Section", "row": 3, "source": "log.xlsx"},
+        ]
+        with patch("dc_assistant.scanning.digest", side_effect=AssertionError("native file read")):
+            result = scan_batch(self.root, config, records, check_pdf=False)
+        self.assertEqual(result["summary"]["drawings"], 3)
+        self.assertEqual(result["summary"]["unique_drawing_numbers"], 2)
+        self.assertEqual(result["summary"]["delivery_files"], 5)
+        self.assertEqual(sum(len(row["pdf_paths"]) for row in result["drawings"]), 2)
+        self.assertEqual([row["missing_formats"] for row in result["missing_formats"]], [["PDF"]])
+        self.assertEqual(result["register_not_in_batch"], [])
+        output = self.root.parent / (uuid.uuid4().hex + ".xlsx")
+        try:
+            export_results(output, {"name": "Test", "code": "00075", "settings": config}, result)
+            book = openpyxl.load_workbook(output, read_only=True)
+            try:
+                sheet = book["حصر اللوحات"]
+                self.assertEqual(sheet.max_row, 6)
+                self.assertEqual(sheet["H5"].value, 2)
+                self.assertEqual(sheet["H6"].value, 3)
+                self.assertEqual(book["حصر كل الملفات"].max_row, 6)
+                self.assertEqual(book["نواقص الصيغ"]["D2"].value, "PDF")
+            finally:
+                book.close()
+        finally:
+            output.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":
