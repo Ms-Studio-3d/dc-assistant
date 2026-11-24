@@ -130,6 +130,17 @@ def _check_duplicates(items, cancel_event):
     for group in groups.values():
         if len(group) < 2:
             continue
+        # Inspect PDF content only. DWG and every other native format are
+        # inventoried by name; even hashing them would read their contents.
+        if group[0]["format"] != "PDF":
+            for item in group:
+                add_issue(
+                    item,
+                    "DUPLICATE_UNVERIFIED",
+                    "warning",
+                    "أكثر من ملف بنفس الرقم والإصدار والصيغة؛ المحتوى لم يُفتح",
+                )
+            continue
         for item in group:
             check_cancelled(cancel_event)
             try:
@@ -179,6 +190,12 @@ def scan_batch(
             continue
         inventory.append(path)
     inventory.sort()
+    # This inventory records names and paths only. Native CAD/Revit files are
+    # never opened by this scanner.
+    delivery_files = [
+        {"path": str(path), "file": path.name, "format": path.suffix[1:].upper()}
+        for path in inventory
+    ]
     files = [path for path in inventory if path.suffix.lower() in SUPPORTED_FILES]
     attachments = [
         {"path": str(path), "file": path.name, "format": path.suffix[1:].upper()}
@@ -226,27 +243,81 @@ def scan_batch(
         items.append(item)
     _check_duplicates(items, cancel_event)
     check_cancelled(cancel_event)
-    pdf_keys = {
-        item["key"] for item in items if item["format"] == "PDF" and item["key"]
+    required_formats = settings.get("required_drawing_formats", ["PDF"])
+    if not isinstance(required_formats, list) or not required_formats or any(
+        value not in {"PDF", "DWG"} for value in required_formats
+    ):
+        raise ValueError("صيغ اللوحات المطلوبة يجب أن تكون PDF أو DWG")
+    required_formats = list(dict.fromkeys(required_formats))
+    drawing_groups = defaultdict(list)
+    for item in items:
+        # Unrecognized names remain visible in the drawing sheet rather than
+        # disappearing from the delivery count.
+        group_key = (item["key"], item["revision"]) if item["key"] else (
+            "unrecognized:" + item["path"], ""
+        )
+        drawing_groups[group_key].append(item)
+    drawings = []
+    for group in drawing_groups.values():
+        lead = next((item for item in group if item["format"] == "PDF"), group[0])
+        present_formats = {item["format"] for item in group}
+        drawings.append(
+            {
+                "number": lead["number"] or Path(lead["file"]).stem,
+                "revision": lead["revision"],
+                "title": lead["title"],
+                "discipline": lead["discipline"],
+                "area": lead["area"],
+                "pdf_count": sum(item["format"] == "PDF" for item in group),
+                "dwg_count": sum(item["format"] == "DWG" for item in group),
+                "file_count": len(group),
+                "files": [item["file"] for item in group],
+                "pdf_paths": [item["path"] for item in group if item["format"] == "PDF"],
+                "missing_formats": [
+                    fmt for fmt in required_formats if fmt not in present_formats
+                ],
+            }
+        )
+    drawings.sort(key=lambda row: (row["discipline"], row["number"], row["revision"]))
+    unique_drawing_count = len(
+        {item["key"] or "unrecognized:" + item["path"] for item in items}
+    )
+    format_keys = {
+        fmt: {item["key"] for item in items if item["format"] == fmt and item["key"]}
+        for fmt in required_formats
     }
-    pdf_versions = {
-        (item["key"], item["revision"])
-        for item in items
-        if item["format"] == "PDF" and item["key"]
+    format_versions = {
+        fmt: {
+            (item["key"], item["revision"])
+            for item in items
+            if item["format"] == fmt and item["key"]
+        }
+        for fmt in required_formats
     }
     missing = []
+    missing_formats = []
     for key, entries in register.items():
         for record in entries:
-            present = (
-                (key, record["revision"]) in pdf_versions
-                if record["revision"]
-                else key in pdf_keys
-            )
-            if not present:
+            absent_formats = [
+                fmt
+                for fmt in required_formats
+                if not (
+                    (key, record["revision"]) in format_versions[fmt]
+                    if record["revision"]
+                    else key in format_keys[fmt]
+                )
+            ]
+            if absent_formats:
+                missing_formats.append({**record, "missing_formats": absent_formats})
+            if len(absent_formats) == len(required_formats):
                 missing.append(record)
     return {
         "items": items,
         "attachments": attachments,
+        "delivery_files": delivery_files,
+        "drawings": drawings,
+        "required_drawing_formats": required_formats,
+        "missing_formats": missing_formats,
         "register_sources": sorted({r["source"] for r in records if r.get("source")}),
         "register_not_in_batch": missing,
         "invalid_register": invalid_register,
@@ -255,6 +326,9 @@ def scan_batch(
             "pdf": sum(item["format"] == "PDF" for item in items),
             "dwg": sum(item["format"] == "DWG" for item in items),
             "attachments": len(attachments),
+            "drawings": len(drawings),
+            "unique_drawing_numbers": unique_drawing_count,
+            "delivery_files": len(delivery_files),
             "with_observations": sum(bool(item["issues"]) for item in items),
             "with_warnings_or_errors": sum(
                 any(

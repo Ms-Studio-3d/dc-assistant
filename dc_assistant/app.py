@@ -203,8 +203,8 @@ class App(tk.Tk):
             ("استيراد لوج Excel", self.import_register),
             ("فحص دفعة ملفات", self.start_scan),
             ("دفعات سابقة", self.history),
-            ("تصدير Excel", self.export),
-            ("فتح الملف المحدد", self.open_selected),
+            ("تصدير حصر اللوحات Excel", self.export),
+            ("فتح PDF المحدد", self.open_selected),
         ]
         for index, (text, command) in enumerate(actions):
             button = ttk.Button(tools, text=text, command=command)
@@ -231,9 +231,39 @@ class App(tk.Tk):
         ttk.Label(self.container, textvariable=self.info_var, anchor="e").pack(
             fill="x", pady=8
         )
+        self.result_tabs = ttk.Notebook(self.container)
+        self.result_tabs.pack(fill="both", expand=True)
+        drawings_grid = ttk.Frame(self.result_tabs)
+        grid = ttk.Frame(self.result_tabs)
+        self.result_tabs.add(drawings_grid, text="حصر اللوحات")
+        self.result_tabs.add(grid, text="مطابقة الملفات")
+        drawing_columns = (
+            "missing", "files", "dwg", "pdf", "discipline", "revision", "number", "title"
+        )
+        self.drawing_tree = ttk.Treeview(
+            drawings_grid, columns=drawing_columns, show="headings", selectmode="browse"
+        )
+        for key, title, width in [
+            ("missing", "الصيغ الناقصة", 140),
+            ("files", "إجمالي الملفات", 100),
+            ("dwg", "DWG", 65),
+            ("pdf", "PDF", 65),
+            ("discipline", "التخصص", 100),
+            ("revision", "الإصدار", 70),
+            ("number", "رقم اللوحة", 330),
+            ("title", "عنوان اللوحة من اللوج", 330),
+        ]:
+            self.drawing_tree.heading(key, text=title)
+            self.drawing_tree.column(key, width=width, minwidth=55, anchor="e")
+        drawing_vs = ttk.Scrollbar(drawings_grid, orient="vertical", command=self.drawing_tree.yview)
+        drawing_hs = ttk.Scrollbar(drawings_grid, orient="horizontal", command=self.drawing_tree.xview)
+        self.drawing_tree.configure(yscrollcommand=drawing_vs.set, xscrollcommand=drawing_hs.set)
+        self.drawing_tree.grid(row=0, column=0, sticky="nsew")
+        drawing_vs.grid(row=0, column=1, sticky="ns")
+        drawing_hs.grid(row=1, column=0, sticky="ew")
+        drawings_grid.rowconfigure(0, weight=1)
+        drawings_grid.columnconfigure(0, weight=1)
         columns = ("issues", "status", "revision", "number", "file")
-        grid = ttk.Frame(self.container)
-        grid.pack(fill="both", expand=True)
         self.tree = ttk.Treeview(
             grid, columns=columns, show="headings", selectmode="browse"
         )
@@ -296,6 +326,7 @@ class App(tk.Tk):
             self.results = None
             self.results_settings = None
             self.tree.delete(*self.tree.get_children())
+            self.drawing_tree.delete(*self.drawing_tree.get_children())
             self.progress.configure(value=0)
             self.info_var.set(
                 f"اللوج المستورد: {len(records)} سجل — {dlg.result['sheet']}"
@@ -408,6 +439,16 @@ class App(tk.Tk):
                 else "هذه النتيجة أُنشئت دون لوج مستورد"
             )
         self.tree.delete(*self.tree.get_children())
+        self.drawing_tree.delete(*self.drawing_tree.get_children())
+        for i, row in enumerate(results.get("drawings", [])):
+            self.drawing_tree.insert(
+                "", "end", iid=str(i),
+                values=(
+                    ", ".join(row["missing_formats"]), row["file_count"],
+                    row["dwg_count"], row["pdf_count"], row["discipline"],
+                    row["revision"], row["number"], row["title"],
+                ),
+            )
         for i, r in enumerate(results["items"]):
             self.tree.insert(
                 "",
@@ -423,7 +464,7 @@ class App(tk.Tk):
             )
         s = results["summary"]
         self.status_var.set(
-            f"{s['files']} ملف | PDF: {s['pdf']} | DWG: {s['dwg']} | إضافية: {s.get('attachments',0)} | لها ملاحظات: {s['with_observations']} | سجلات دون PDF مطابق: {len(results['register_not_in_batch'])}"
+            f"أرقام لوحات: {s.get('unique_drawing_numbers', s.get('drawings', 0))} | لوحات مع الإصدارات: {s.get('drawings', 0)} | ملفات: {s.get('delivery_files', s['files'])} | PDF: {s['pdf']} | DWG: {s['dwg']} | نواقص صيغ: {len(results.get('missing_formats', []))}"
         )
 
     def selected(self):
@@ -435,8 +476,33 @@ class App(tk.Tk):
         )
 
     def open_selected(self):
+        if self.result_tabs.index(self.result_tabs.select()) == 0:
+            selection = self.drawing_tree.selection()
+            if not selection or not self.results:
+                return
+            drawing = self.results.get("drawings", [])[int(selection[0])]
+            pdf_paths = drawing.get("pdf_paths", [])
+            if not pdf_paths:
+                messagebox.showinfo(
+                    "فتح PDF", "لا يوجد PDF لهذه اللوحة في الدفعة المختارة.", parent=self
+                )
+                return
+            path = Path(pdf_paths[0])
+            if not path.is_file():
+                messagebox.showerror("الملف غير موجود", str(path), parent=self)
+                return
+            try:
+                os.startfile(str(path))
+            except OSError as exc:
+                messagebox.showerror("تعذر فتح الملف", str(exc), parent=self)
+            return
         item = self.selected()
         if not item:
+            return
+        if item["format"] != "PDF":
+            messagebox.showinfo(
+                "فتح الملفات", "فتح المحتوى متاح لملفات PDF فقط؛ الملفات الأخرى تُحصر بأسمائها.", parent=self
+            )
             return
         path = Path(item["path"])
         if not path.is_file():

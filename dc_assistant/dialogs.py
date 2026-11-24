@@ -64,6 +64,10 @@ class ProjectDialog(tk.Toplevel):
             text="السماح باختلاف الحروف الكبيرة والصغيرة عند المطابقة",
             variable=self.case_var,
         ).grid(row=5, column=0, columnspan=2, sticky="e", padx=8)
+        self.required_formats_var = field(
+            basic, 6, "صيغ اللوحات المطلوبة في التسليمة (PDF, DWG)",
+            ", ".join(settings.get("required_drawing_formats", ["PDF"])),
+        )
 
         naming.columnconfigure(0, weight=1)
         self.example_var = field(
@@ -223,6 +227,16 @@ class ProjectDialog(tk.Toplevel):
                 "statuses": statuses,
                 "procedure_notes": self.procedure_text.get("1.0", "end").strip(),
             }
+            required_formats = [
+                value.strip().upper()
+                for value in self.required_formats_var.get().replace("،", ",").split(",")
+                if value.strip()
+            ]
+            if not required_formats or any(
+                value not in {"PDF", "DWG"} for value in required_formats
+            ):
+                raise ValueError("صيغ اللوحات المطلوبة: اكتب PDF أو DWG فقط، مفصولة بفاصلة")
+            settings["required_drawing_formats"] = list(dict.fromkeys(required_formats))
             if parts:
                 rule = NamingRule(settings)
                 if not rule.parse(settings["example"]):
