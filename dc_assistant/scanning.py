@@ -244,8 +244,10 @@ def scan_batch(
     _check_duplicates(items, cancel_event)
     check_cancelled(cancel_event)
     required_formats = settings.get("required_drawing_formats", ["PDF"])
-    if not isinstance(required_formats, list) or not required_formats or any(
-        value not in {"PDF", "DWG"} for value in required_formats
+    if (
+        not isinstance(required_formats, list)
+        or not required_formats
+        or any(value not in {"PDF", "DWG"} for value in required_formats)
     ):
         raise ValueError("صيغ اللوحات المطلوبة يجب أن تكون PDF أو DWG")
     required_formats = list(dict.fromkeys(required_formats))
@@ -253,8 +255,10 @@ def scan_batch(
     for item in items:
         # Unrecognized names remain visible in the drawing sheet rather than
         # disappearing from the delivery count.
-        group_key = (item["key"], item["revision"]) if item["key"] else (
-            "unrecognized:" + item["path"], ""
+        group_key = (
+            (item["key"], item["revision"])
+            if item["key"]
+            else ("unrecognized:" + item["path"], "")
         )
         drawing_groups[group_key].append(item)
     drawings = []
@@ -272,7 +276,9 @@ def scan_batch(
                 "dwg_count": sum(item["format"] == "DWG" for item in group),
                 "file_count": len(group),
                 "files": [item["file"] for item in group],
-                "pdf_paths": [item["path"] for item in group if item["format"] == "PDF"],
+                "pdf_paths": [
+                    item["path"] for item in group if item["format"] == "PDF"
+                ],
                 "missing_formats": [
                     fmt for fmt in required_formats if fmt not in present_formats
                 ],

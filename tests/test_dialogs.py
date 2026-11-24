@@ -100,14 +100,23 @@ class DialogTests(unittest.TestCase):
         pdf = self.root / "sheet.pdf"
         pdf.write_bytes(b"PDF")
         drawing = {
-            "number": "P-001", "revision": "00", "title": "Plan",
-            "discipline": "ARC", "pdf_count": 1, "dwg_count": 1,
-            "file_count": 2, "missing_formats": [], "pdf_paths": [str(pdf)],
+            "number": "P-001",
+            "revision": "00",
+            "title": "Plan",
+            "discipline": "ARC",
+            "pdf_count": 1,
+            "dwg_count": 1,
+            "file_count": 2,
+            "missing_formats": [],
+            "pdf_paths": [str(pdf)],
         }
-        self.app.display({
-            "items": [], "drawings": [drawing],
-            "summary": {"files": 2, "pdf": 1, "dwg": 1, "drawings": 1},
-        })
+        self.app.display(
+            {
+                "items": [],
+                "drawings": [drawing],
+                "summary": {"files": 2, "pdf": 1, "dwg": 1, "drawings": 1},
+            }
+        )
         self.app.drawing_tree.selection_set("0")
         with patch("dc_assistant.app.os.startfile") as startfile:
             self.app.open_selected()

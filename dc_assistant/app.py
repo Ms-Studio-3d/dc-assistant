@@ -238,7 +238,14 @@ class App(tk.Tk):
         self.result_tabs.add(drawings_grid, text="حصر اللوحات")
         self.result_tabs.add(grid, text="مطابقة الملفات")
         drawing_columns = (
-            "missing", "files", "dwg", "pdf", "discipline", "revision", "number", "title"
+            "missing",
+            "files",
+            "dwg",
+            "pdf",
+            "discipline",
+            "revision",
+            "number",
+            "title",
         )
         self.drawing_tree = ttk.Treeview(
             drawings_grid, columns=drawing_columns, show="headings", selectmode="browse"
@@ -255,9 +262,15 @@ class App(tk.Tk):
         ]:
             self.drawing_tree.heading(key, text=title)
             self.drawing_tree.column(key, width=width, minwidth=55, anchor="e")
-        drawing_vs = ttk.Scrollbar(drawings_grid, orient="vertical", command=self.drawing_tree.yview)
-        drawing_hs = ttk.Scrollbar(drawings_grid, orient="horizontal", command=self.drawing_tree.xview)
-        self.drawing_tree.configure(yscrollcommand=drawing_vs.set, xscrollcommand=drawing_hs.set)
+        drawing_vs = ttk.Scrollbar(
+            drawings_grid, orient="vertical", command=self.drawing_tree.yview
+        )
+        drawing_hs = ttk.Scrollbar(
+            drawings_grid, orient="horizontal", command=self.drawing_tree.xview
+        )
+        self.drawing_tree.configure(
+            yscrollcommand=drawing_vs.set, xscrollcommand=drawing_hs.set
+        )
         self.drawing_tree.grid(row=0, column=0, sticky="nsew")
         drawing_vs.grid(row=0, column=1, sticky="ns")
         drawing_hs.grid(row=1, column=0, sticky="ew")
@@ -442,11 +455,18 @@ class App(tk.Tk):
         self.drawing_tree.delete(*self.drawing_tree.get_children())
         for i, row in enumerate(results.get("drawings", [])):
             self.drawing_tree.insert(
-                "", "end", iid=str(i),
+                "",
+                "end",
+                iid=str(i),
                 values=(
-                    ", ".join(row["missing_formats"]), row["file_count"],
-                    row["dwg_count"], row["pdf_count"], row["discipline"],
-                    row["revision"], row["number"], row["title"],
+                    ", ".join(row["missing_formats"]),
+                    row["file_count"],
+                    row["dwg_count"],
+                    row["pdf_count"],
+                    row["discipline"],
+                    row["revision"],
+                    row["number"],
+                    row["title"],
                 ),
             )
         for i, r in enumerate(results["items"]):
@@ -484,7 +504,9 @@ class App(tk.Tk):
             pdf_paths = drawing.get("pdf_paths", [])
             if not pdf_paths:
                 messagebox.showinfo(
-                    "فتح PDF", "لا يوجد PDF لهذه اللوحة في الدفعة المختارة.", parent=self
+                    "فتح PDF",
+                    "لا يوجد PDF لهذه اللوحة في الدفعة المختارة.",
+                    parent=self,
                 )
                 return
             path = Path(pdf_paths[0])
@@ -501,7 +523,9 @@ class App(tk.Tk):
             return
         if item["format"] != "PDF":
             messagebox.showinfo(
-                "فتح الملفات", "فتح المحتوى متاح لملفات PDF فقط؛ الملفات الأخرى تُحصر بأسمائها.", parent=self
+                "فتح الملفات",
+                "فتح المحتوى متاح لملفات PDF فقط؛ الملفات الأخرى تُحصر بأسمائها.",
+                parent=self,
             )
             return
         path = Path(item["path"])

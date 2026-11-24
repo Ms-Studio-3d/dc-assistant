@@ -142,11 +142,16 @@ class CoreTests(unittest.TestCase):
         (self.root / name).write_bytes(b"current")
         (self.root / "OLD").mkdir()
         (self.root / "OLD" / name).write_bytes(b"different")
-        with patch("dc_assistant.scanning.digest", side_effect=AssertionError("DWG read")):
+        with patch(
+            "dc_assistant.scanning.digest", side_effect=AssertionError("DWG read")
+        ):
             result = scan_batch(self.root, settings(), check_pdf=False)
         self.assertEqual(result["summary"]["files"], 2)
         self.assertTrue(
-            all(any("المحتوى لم يُفتح" in x for x in r["issues"]) for r in result["items"])
+            all(
+                any("المحتوى لم يُفتح" in x for x in r["issues"])
+                for r in result["items"]
+            )
         )
         conf = settings()
         conf["excluded_folders"] = ["OLD"]
@@ -228,20 +233,39 @@ class CoreTests(unittest.TestCase):
         config = settings()
         config["required_drawing_formats"] = ["PDF", "DWG"]
         records = [
-            {"number": root_name[:-3], "revision": "00", "title": "Plan", "row": 2, "source": "log.xlsx"},
-            {"number": other[:-3], "revision": "00", "title": "Section", "row": 3, "source": "log.xlsx"},
+            {
+                "number": root_name[:-3],
+                "revision": "00",
+                "title": "Plan",
+                "row": 2,
+                "source": "log.xlsx",
+            },
+            {
+                "number": other[:-3],
+                "revision": "00",
+                "title": "Section",
+                "row": 3,
+                "source": "log.xlsx",
+            },
         ]
-        with patch("dc_assistant.scanning.digest", side_effect=AssertionError("native file read")):
+        with patch(
+            "dc_assistant.scanning.digest",
+            side_effect=AssertionError("native file read"),
+        ):
             result = scan_batch(self.root, config, records, check_pdf=False)
         self.assertEqual(result["summary"]["drawings"], 3)
         self.assertEqual(result["summary"]["unique_drawing_numbers"], 2)
         self.assertEqual(result["summary"]["delivery_files"], 5)
         self.assertEqual(sum(len(row["pdf_paths"]) for row in result["drawings"]), 2)
-        self.assertEqual([row["missing_formats"] for row in result["missing_formats"]], [["PDF"]])
+        self.assertEqual(
+            [row["missing_formats"] for row in result["missing_formats"]], [["PDF"]]
+        )
         self.assertEqual(result["register_not_in_batch"], [])
         output = self.root.parent / (uuid.uuid4().hex + ".xlsx")
         try:
-            export_results(output, {"name": "Test", "code": "00075", "settings": config}, result)
+            export_results(
+                output, {"name": "Test", "code": "00075", "settings": config}, result
+            )
             book = openpyxl.load_workbook(output, read_only=True)
             try:
                 sheet = book["حصر اللوحات"]

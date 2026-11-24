@@ -163,34 +163,79 @@ def export_results(path, project, results):
         [row["number"], row["revision"], row["title"], row["row"], row["source"]]
         for row in results["register_not_in_batch"]
     ]
-    drawing_rows = [[
-        "رقم اللوحة", "عنوان اللوحة من اللوج", "الإصدار", "التخصص",
-        "المنطقة", "عدد PDF", "عدد DWG", "إجمالي الملفات",
-        "الصيغ الناقصة", "أسماء الملفات",
-    ]]
+    drawing_rows = [
+        [
+            "رقم اللوحة",
+            "عنوان اللوحة من اللوج",
+            "الإصدار",
+            "التخصص",
+            "المنطقة",
+            "عدد PDF",
+            "عدد DWG",
+            "إجمالي الملفات",
+            "الصيغ الناقصة",
+            "أسماء الملفات",
+        ]
+    ]
     for row in results.get("drawings", []):
-        drawing_rows.append([
-            row["number"], row["title"], row["revision"], row["discipline"],
-            row["area"], row["pdf_count"], row["dwg_count"], row["file_count"],
-            ", ".join(row["missing_formats"]), "\n".join(row["files"]),
-        ])
-    drawing_rows.append([
-        "إجمالي أرقام اللوحات الفريدة", "", "", "", "", "", "",
-        results.get("summary", {}).get("unique_drawing_numbers", len(results.get("drawings", []))), "", "",
-    ])
-    drawing_rows.append([
-        "إجمالي اللوحات مع الإصدارات", "", "", "", "", "", "",
-        len(results.get("drawings", [])), "", "",
-    ])
+        drawing_rows.append(
+            [
+                row["number"],
+                row["title"],
+                row["revision"],
+                row["discipline"],
+                row["area"],
+                row["pdf_count"],
+                row["dwg_count"],
+                row["file_count"],
+                ", ".join(row["missing_formats"]),
+                "\n".join(row["files"]),
+            ]
+        )
+    drawing_rows.append(
+        [
+            "إجمالي أرقام اللوحات الفريدة",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            results.get("summary", {}).get(
+                "unique_drawing_numbers", len(results.get("drawings", []))
+            ),
+            "",
+            "",
+        ]
+    )
+    drawing_rows.append(
+        [
+            "إجمالي اللوحات مع الإصدارات",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            len(results.get("drawings", [])),
+            "",
+            "",
+        ]
+    )
     delivery_rows = [["اسم الملف", "الصيغة", "المسار"]] + [
         [row["file"], row["format"], row["path"]]
         for row in results.get("delivery_files", [])
     ]
-    missing_format_rows = [[
-        "رقم المستند", "الإصدار", "العنوان", "الصيغ الناقصة", "صف اللوج"
-    ]] + [
-        [row["number"], row["revision"], row["title"],
-         ", ".join(row["missing_formats"]), row["row"]]
+    missing_format_rows = [
+        ["رقم المستند", "الإصدار", "العنوان", "الصيغ الناقصة", "صف اللوج"]
+    ] + [
+        [
+            row["number"],
+            row["revision"],
+            row["title"],
+            ", ".join(row["missing_formats"]),
+            row["row"],
+        ]
         for row in results.get("missing_formats", [])
     ]
     invalid = [["رقم المستند", "العنوان", "صف اللوج", "الملاحظة"]] + [
@@ -210,8 +255,16 @@ def export_results(path, project, results):
         ["فولدر الدفعة", snapshot.get("folder", "")],
         ["اللوج المستخدم", snapshot.get("register_source", "")],
         ["نطاق المطابقة", "الدفعة المختارة مقابل اللوج المستورد"],
-        ["صيغ اللوحات المطلوبة", ", ".join(results.get("required_drawing_formats", ["PDF"]))],
-        ["عدد أرقام اللوحات الفريدة", results.get("summary", {}).get("unique_drawing_numbers", len(results.get("drawings", [])))],
+        [
+            "صيغ اللوحات المطلوبة",
+            ", ".join(results.get("required_drawing_formats", ["PDF"])),
+        ],
+        [
+            "عدد أرقام اللوحات الفريدة",
+            results.get("summary", {}).get(
+                "unique_drawing_numbers", len(results.get("drawings", []))
+            ),
+        ],
         ["عدد اللوحات مع الإصدارات", len(results.get("drawings", []))],
         ["إجمالي ملفات الدفعة", len(results.get("delivery_files", results["items"]))],
         [
