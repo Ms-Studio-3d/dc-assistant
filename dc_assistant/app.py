@@ -16,7 +16,7 @@ from .data_dialog import DataDialog
 from .theme import BG, apply_theme, apply_window_theme
 from .windows import place_window
 
-from .core import NamingRule, Store, export_results, read_register, scan_batch
+from .core import Store, export_results, read_register, scan_batch
 from .dialogs import ProjectDialog, RegisterDialog
 from .issues import format_status, pdf_check_label
 from .scanning import ScanCancelled
@@ -200,10 +200,10 @@ class App(tk.Tk):
         self.action_buttons = []
         actions = [
             ("إعدادات المشروع", self.edit_project),
-            ("استيراد لوج Excel", self.import_register),
-            ("فحص دفعة ملفات", self.start_scan),
+            ("1- استيراد لوج Excel (اختياري)", self.import_register),
+            ("2- اختيار فولدر التسليمة وفحصه", self.start_scan),
             ("دفعات سابقة", self.history),
-            ("تصدير حصر اللوحات Excel", self.export),
+            ("3- تصدير حصر اللوحات Excel", self.export),
             ("فتح PDF المحدد", self.open_selected),
         ]
         for index, (text, command) in enumerate(actions):
@@ -214,12 +214,16 @@ class App(tk.Tk):
             self.action_buttons.append(button)
         for column in range(3):
             tools.columnconfigure(column, weight=1)
-        self.pdf_var = tk.BooleanVar(value=True)
+        self.pdf_var = tk.BooleanVar(value=bool(self.project["settings"].get("parts")))
         ttk.Checkbutton(
             self.container,
-            text="البحث عن نص رقم المستند في أول صفحة PDF؛ لا يتحقق من خانة اللوحة",
+            text="فحص نص أول صفحة PDF (اختياري؛ لا يتحقق من خانة اللوحة)",
             variable=self.pdf_var,
         ).pack(anchor="e")
+        self.selected_folder_var = tk.StringVar(value="فولدر التسليمة: لم يُختَر بعد")
+        ttk.Label(
+            self.container, textvariable=self.selected_folder_var, anchor="e"
+        ).pack(fill="x", pady=(6, 0))
         reg = self.store.get_register(self.project["id"])
         self.info_var = tk.StringVar(
             value=(
@@ -306,7 +310,9 @@ class App(tk.Tk):
             state="disabled",
         )
         self.cancel_button.pack(anchor="e", pady=4)
-        self.status_var = tk.StringVar(value="اختار اللوج أو دفعة الملفات للبدء")
+        self.status_var = tk.StringVar(
+            value="اختر فولدر التسليمة لبدء الحصر؛ اللوج اختياري"
+        )
         ttk.Label(self.container, textvariable=self.status_var, anchor="e").pack(
             fill="x"
         )
@@ -351,15 +357,12 @@ class App(tk.Tk):
             messagebox.showerror("تعذر الاستيراد", str(exc), parent=self)
 
     def start_scan(self):
-        try:
-            NamingRule(self.project["settings"])
-        except ValueError as exc:
-            messagebox.showinfo("قواعد التسمية", str(exc), parent=self)
-            self.edit_project()
-            return
-        folder = filedialog.askdirectory(parent=self, title="فولدر الدفعة المراد فحصها")
+        folder = filedialog.askdirectory(
+            parent=self, title="اختر فولدر التسليمة المراد فحصه"
+        )
         if not folder:
             return
+        self.selected_folder_var.set("فولدر التسليمة: " + folder)
         reg = self.store.get_register(self.project["id"])
         records = reg["records"] if reg else []
         settings = json.loads(json.dumps(self.project["settings"]))
@@ -451,8 +454,16 @@ class App(tk.Tk):
                 if source
                 else "هذه النتيجة أُنشئت دون لوج مستورد"
             )
+        if results.get("context", {}).get("folder"):
+            self.selected_folder_var.set(
+                "فولدر التسليمة: " + results["context"]["folder"]
+            )
         self.tree.delete(*self.tree.get_children())
         self.drawing_tree.delete(*self.drawing_tree.get_children())
+        quick_mode = results.get("naming_mode") == "filename"
+        self.drawing_tree.heading(
+            "number", text="اسم اللوحة من الملف" if quick_mode else "رقم اللوحة"
+        )
         for i, row in enumerate(results.get("drawings", [])):
             self.drawing_tree.insert(
                 "",
@@ -483,8 +494,13 @@ class App(tk.Tk):
                 ),
             )
         s = results["summary"]
+        count_text = (
+            f"أسماء لوحات: {s.get('drawings', 0)}"
+            if quick_mode
+            else f"أرقام لوحات: {s.get('unique_drawing_numbers', s.get('drawings', 0))} | لوحات مع الإصدارات: {s.get('drawings', 0)}"
+        )
         self.status_var.set(
-            f"أرقام لوحات: {s.get('unique_drawing_numbers', s.get('drawings', 0))} | لوحات مع الإصدارات: {s.get('drawings', 0)} | ملفات: {s.get('delivery_files', s['files'])} | PDF: {s['pdf']} | DWG: {s['dwg']} | نواقص صيغ: {len(results.get('missing_formats', []))}"
+            f"{count_text} | ملفات: {s.get('delivery_files', s['files'])} | PDF: {s['pdf']} | DWG: {s['dwg']} | نواقص صيغ: {len(results.get('missing_formats', []))}"
         )
 
     def selected(self):

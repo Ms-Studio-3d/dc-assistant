@@ -6,7 +6,7 @@ from pathlib import Path
 
 from .constants import ATTACHMENT_FILES, SUPPORTED_FILES
 from .issues import add_issue, status_meaning
-from .naming import NamingRule
+from .naming import FilenameRule, NamingRule
 from .pdf_checks import ScanCancelled, check_cancelled, inspect_pdf
 
 
@@ -58,7 +58,7 @@ def _match_register(item, parsed, register, has_register, settings, rule):
         add_issue(item, "REGISTER_NOT_FOUND", "warning", "غير موجود في اللوج المستورد")
     elif candidates and not matches:
         add_issue(item, "REVISION_MISMATCH", "error", "الإصدار يختلف عن اللوج المستورد")
-    if not parsed["revision"]:
+    if not parsed["revision"] and rule.parts:
         revision_in_template = any(part["role"] == "revision" for part in rule.parts)
         add_issue(
             item,
@@ -174,7 +174,8 @@ def scan_batch(
     folder = Path(folder)
     if not folder.is_dir():
         raise ValueError("فولدر الدفعة غير موجود")
-    rule = NamingRule(settings)
+    quick_mode = not settings.get("parts")
+    rule = FilenameRule() if quick_mode else NamingRule(settings)
     register, invalid_register = prepare_register(records, rule)
     excluded = {
         value.casefold() for value in settings.get("excluded_folders", []) if value
@@ -318,6 +319,7 @@ def scan_batch(
             if len(absent_formats) == len(required_formats):
                 missing.append(record)
     return {
+        "naming_mode": "filename" if quick_mode else "project_rule",
         "items": items,
         "attachments": attachments,
         "delivery_files": delivery_files,

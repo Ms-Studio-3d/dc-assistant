@@ -279,6 +279,52 @@ class CoreTests(unittest.TestCase):
         finally:
             output.unlink(missing_ok=True)
 
+    def test_quick_inventory_without_naming_settings(self):
+        stem = "LEN-ARS-ECE-STR-WSD-04-00001"
+        self.pdf(self.root / (stem + ".pdf"))
+        (self.root / (stem + ".dwg")).write_bytes(b"native CAD")
+        (self.root / "Coordination.rvt").write_bytes(b"native Revit")
+        records = [
+            {
+                "number": stem,
+                "revision": "A",
+                "title": "First floor plan",
+                "row": 2,
+                "source": "log.xlsx",
+            }
+        ]
+        with patch(
+            "dc_assistant.scanning.digest", side_effect=AssertionError("native read")
+        ):
+            result = scan_batch(
+                self.root,
+                {"required_drawing_formats": ["PDF", "DWG"]},
+                records,
+                check_pdf=False,
+            )
+        self.assertEqual(result["naming_mode"], "filename")
+        self.assertEqual(result["summary"]["drawings"], 1)
+        self.assertEqual(result["summary"]["delivery_files"], 3)
+        self.assertEqual(result["drawings"][0]["number"], stem)
+        self.assertEqual(result["drawings"][0]["title"], "First floor plan")
+        self.assertEqual(result["register_not_in_batch"], [])
+        output = self.root.parent / (uuid.uuid4().hex + ".xlsx")
+        try:
+            export_results(
+                output,
+                {"name": "Test", "code": "", "settings": {}},
+                result,
+            )
+            book = openpyxl.load_workbook(output, read_only=True)
+            try:
+                sheet = book["حصر اللوحات"]
+                self.assertEqual(sheet["A1"].value, "اسم اللوحة من الملف")
+                self.assertEqual(sheet["H3"].value, 1)
+            finally:
+                book.close()
+        finally:
+            output.unlink(missing_ok=True)
+
 
 if __name__ == "__main__":
     unittest.main()

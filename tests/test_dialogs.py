@@ -130,6 +130,24 @@ class DialogTests(unittest.TestCase):
         startfile.assert_not_called()
         showinfo.assert_called_once()
 
+    def test_scan_button_selects_folder_without_naming_rules(self):
+        project_id = self.app.store.save_project("Saved", "P", {})
+        self.app.open_project(project_id)
+        self.assertFalse(self.app.pdf_var.get())
+        with (
+            patch(
+                "dc_assistant.app.filedialog.askdirectory", return_value=str(self.root)
+            ) as choose_folder,
+            patch("dc_assistant.app.threading.Thread") as thread,
+            patch("dc_assistant.app.messagebox.showinfo") as showinfo,
+        ):
+            self.app.start_scan()
+        choose_folder.assert_called_once()
+        thread.return_value.start.assert_called_once()
+        showinfo.assert_not_called()
+        self.assertIn(str(self.root), self.app.selected_folder_var.get())
+        self.app.set_busy(False)
+
 
 if __name__ == "__main__":
     unittest.main()

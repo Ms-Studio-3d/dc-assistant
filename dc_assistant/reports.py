@@ -163,9 +163,10 @@ def export_results(path, project, results):
         [row["number"], row["revision"], row["title"], row["row"], row["source"]]
         for row in results["register_not_in_batch"]
     ]
+    quick_mode = results.get("naming_mode") == "filename"
     drawing_rows = [
         [
-            "رقم اللوحة",
+            "اسم اللوحة من الملف" if quick_mode else "رقم اللوحة",
             "عنوان اللوحة من اللوج",
             "الإصدار",
             "التخصص",
@@ -194,7 +195,7 @@ def export_results(path, project, results):
         )
     drawing_rows.append(
         [
-            "إجمالي أرقام اللوحات الفريدة",
+            "إجمالي أسماء اللوحات" if quick_mode else "إجمالي أرقام اللوحات الفريدة",
             "",
             "",
             "",
@@ -208,20 +209,21 @@ def export_results(path, project, results):
             "",
         ]
     )
-    drawing_rows.append(
-        [
-            "إجمالي اللوحات مع الإصدارات",
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            len(results.get("drawings", [])),
-            "",
-            "",
-        ]
-    )
+    if not quick_mode:
+        drawing_rows.append(
+            [
+                "إجمالي اللوحات مع الإصدارات",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                len(results.get("drawings", [])),
+                "",
+                "",
+            ]
+        )
     delivery_rows = [["اسم الملف", "الصيغة", "المسار"]] + [
         [row["file"], row["format"], row["path"]]
         for row in results.get("delivery_files", [])
@@ -256,20 +258,35 @@ def export_results(path, project, results):
         ["اللوج المستخدم", snapshot.get("register_source", "")],
         ["نطاق المطابقة", "الدفعة المختارة مقابل اللوج المستورد"],
         [
+            "طريقة الحصر",
+            (
+                "اسم الملف الكامل دون الصيغة؛ لم يُفصل رقم اللوحة عن الإصدار"
+                if quick_mode
+                else "قواعد تسمية المشروع"
+            ),
+        ],
+        [
             "صيغ اللوحات المطلوبة",
             ", ".join(results.get("required_drawing_formats", ["PDF"])),
         ],
         [
-            "عدد أرقام اللوحات الفريدة",
+            "عدد أسماء اللوحات" if quick_mode else "عدد أرقام اللوحات الفريدة",
             results.get("summary", {}).get(
                 "unique_drawing_numbers", len(results.get("drawings", []))
             ),
         ],
-        ["عدد اللوحات مع الإصدارات", len(results.get("drawings", []))],
+        [
+            "عدد اللوحات مع الإصدارات" if not quick_mode else "عدد صفوف الحصر",
+            len(results.get("drawings", [])),
+        ],
         ["إجمالي ملفات الدفعة", len(results.get("delivery_files", results["items"]))],
         [
             "المستندات غير الموجودة",
-            "سجلات لا توجد لها أي صيغة مطلوبة مطابقة بالرقم والإصدار في هذه الدفعة فقط",
+            (
+                "سجلات لا توجد لها أي صيغة مطلوبة مطابقة باسم الملف في هذه الدفعة فقط"
+                if quick_mode
+                else "سجلات لا توجد لها أي صيغة مطلوبة مطابقة بالرقم والإصدار في هذه الدفعة فقط"
+            ),
         ],
         ["ملفات CAD وRevit", "حصر بالأسماء والمسارات فقط؛ المحتوى لم يُفتح"],
         [

@@ -55,7 +55,7 @@ class ProjectDialog(tk.Toplevel):
         )
         ttk.Label(
             basic,
-            text="تسجيل المشروع يحتاج الاسم فقط. أكمل قواعد التسمية قبل فحص الملفات.",
+            text="ابدأ الحصر باختيار فولدر التسليمة. قواعد التسمية اختيارية للمطابقة التفصيلية.",
             anchor="e",
         ).grid(row=4, column=0, columnspan=2, sticky="e", padx=8, pady=18)
         self.case_var = tk.BooleanVar(value=settings.get("ignore_case", False))

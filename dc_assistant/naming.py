@@ -5,6 +5,48 @@ import re
 from .constants import ROLE_LABELS
 
 
+class FilenameRule:
+    """Quick inventory when no project naming template has been configured."""
+
+    parts = []
+
+    @staticmethod
+    def key(value):
+        return str(value).casefold()
+
+    @staticmethod
+    def revision(value):
+        # Without a naming template, the filename cannot be split into a
+        # drawing number and revision reliably.
+        return ""
+
+    def parse(self, value):
+        name = str(value).strip()
+        if name.lower().endswith((".pdf", ".dwg")):
+            name = name[:-4]
+        if not name:
+            return None
+        return {
+            "number": name,
+            "key": self.key(name),
+            "revision": "",
+            "discipline": "",
+            "area": "",
+            "part_values": [],
+        }
+
+    @staticmethod
+    def find_in_pdf_text(text):
+        return []
+
+    @staticmethod
+    def expected_in_pdf_text(text, parsed):
+        return (
+            re.sub(r"\s+", "", parsed["number"]).casefold()
+            in re.sub(r"\s+", "", text).casefold()
+        )
+
+
 class NamingRule:
     def __init__(self, settings):
         self.settings = settings
